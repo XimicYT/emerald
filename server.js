@@ -23,11 +23,20 @@ wss.on('connection', (ws) => {
 
         playerId = data.id;
         const sanitizedUsername = String(data.username || 'Trainer').slice(0, 16);
-        const newPlayer = { id: playerId, username: sanitizedUsername, x: 0, y: 0, map: 0 };
+        const newPlayer = { 
+          id: playerId, 
+          username: sanitizedUsername, 
+          x: Number(data.x) || 0, 
+          y: Number(data.y) || 0, 
+          map: Number(data.map) || 0 
+        };
         
         clients.set(playerId, { ws, ...newPlayer });
 
-        sendPlayerList(ws);
+        // Exclude joining player from their own initial list
+        sendPlayerList(ws, playerId);
+        
+        // Notify other clients
         broadcastExcept(playerId, {
           type: 'PLAYER_JOIN',
           player: newPlayer
@@ -63,7 +72,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Periodic ping to clean up dropped connections
 const interval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();
@@ -74,14 +82,16 @@ const interval = setInterval(() => {
 
 wss.on('close', () => clearInterval(interval));
 
-function sendPlayerList(ws) {
-  const playerList = Array.from(clients.values()).map(p => ({
-    id: p.id,
-    username: p.username,
-    x: p.x,
-    y: p.y,
-    map: p.map
-  }));
+function sendPlayerList(ws, excludeId) {
+  const playerList = Array.from(clients.values())
+    .filter(p => p.id !== excludeId) // Exclude local player
+    .map(p => ({
+      id: p.id,
+      username: p.username,
+      x: p.x,
+      y: p.y,
+      map: p.map
+    }));
 
   safeSend(ws, { type: 'PLAYER_LIST', players: playerList });
 }
