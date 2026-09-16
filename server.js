@@ -13,11 +13,20 @@ wss.on('connection', (ws) => {
 
       if (data.type === 'JOIN') {
         playerId = data.id;
-        clients.set(playerId, { ws, username: data.username, x: 0, y: 0, map: 0 });
-        broadcastPlayerList();
+        const newPlayer = { id: playerId, username: data.username, x: 0, y: 0, map: 0 };
+        clients.set(playerId, { ws, ...newPlayer });
+
+        // Send active player list to the newly connected client
+        sendPlayerList(ws);
+
+        // Notify all other clients of the new player
+        broadcastExcept(playerId, {
+          type: 'PLAYER_JOIN',
+          player: newPlayer
+        });
       }
 
-      if (data.type === 'POSITION') {
+      if (data.type === 'MOVE') {
         const player = clients.get(playerId);
         if (player) {
           player.x = data.x;
@@ -25,7 +34,7 @@ wss.on('connection', (ws) => {
           player.map = data.map;
           
           broadcastExcept(playerId, {
-            type: 'PLAYER_MOVED',
+            type: 'MOVE',
             id: playerId,
             x: data.x,
             y: data.y,
@@ -41,25 +50,22 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (playerId) {
       clients.delete(playerId);
-      broadcastExcept(playerId, { type: 'PLAYER_DISCONNECTED', id: playerId });
+      broadcastExcept(playerId, { type: 'PLAYER_LEAVE', id: playerId });
     }
   });
 });
 
-function broadcastPlayerList() {
-  const playerList = Array.from(clients.entries()).map(([id, p]) => ({
-    id,
+function sendPlayerList(ws) {
+  const playerList = Array.from(clients.values()).map(p => ({
+    id: p.id,
     username: p.username,
     x: p.x,
     y: p.y,
     map: p.map
   }));
 
-  const payload = JSON.stringify({ type: 'PLAYER_LIST', players: playerList });
-  for (const client of clients.values()) {
-    if (client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(payload);
-    }
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'PLAYER_LIST', players: playerList }));
   }
 }
 
