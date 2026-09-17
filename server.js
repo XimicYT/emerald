@@ -17,7 +17,8 @@ app.use(express.static('public'));
 const players = {};
 
 io.on('connection', (socket) => {
-  players[socket.id] = { id: socket.id, x: 0, y: 0, mapGroup: 0, mapNum: 0 };
+  // Default new players to facing Down (dir: 1)
+  players[socket.id] = { id: socket.id, x: 0, y: 0, mapGroup: 0, mapNum: 0, dir: 1 };
 
   // Send all active players to the newly connected user
   socket.emit('currentPlayers', players);
