@@ -1,81 +1,48 @@
-const { WebSocketServer, WebSocket } = require('ws');
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
 
-const PORT = process.env.PORT || 8080;
-const wss = new WebSocketServer({ port: PORT });
-const clients = new Map();
+const app = express();
+app.use(cors());
 
-wss.on('connection', (ws) => {
-  let playerId = null;
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Allow all origins for testing (you can lock this down later)
+    methods: ["GET", "POST"]
+  }
+});
 
-  ws.on('message', (raw) => {
-    try {
-      const data = JSON.parse(raw);
+// Store connected players
+const players = {};
 
-      if (data.type === 'JOIN') {
-        playerId = data.id;
-        const newPlayer = { id: playerId, username: data.username, x: 0, y: 0, map: 0 };
-        clients.set(playerId, { ws, ...newPlayer });
+io.on('connection', (socket) => {
+  console.log(`Player connected: ${socket.id}`);
+  
+  // Initialize player data
+  players[socket.id] = { x: 0, y: 0, mapId: 0 };
 
-        // Send active player list to the newly connected client
-        sendPlayerList(ws);
-
-        // Notify all other clients of the new player
-        broadcastExcept(playerId, {
-          type: 'PLAYER_JOIN',
-          player: newPlayer
-        });
-      }
-
-      if (data.type === 'MOVE') {
-        const player = clients.get(playerId);
-        if (player) {
-          player.x = data.x;
-          player.y = data.y;
-          player.map = data.map;
-          
-          broadcastExcept(playerId, {
-            type: 'MOVE',
-            id: playerId,
-            x: data.x,
-            y: data.y,
-            map: data.map
-          });
-        }
-      }
-    } catch (e) {
-      console.error('Invalid message:', e);
-    }
+  // Listen for position updates from the client
+  socket.on('updatePosition', (data) => {
+    players[socket.id] = {
+      x: data.x,
+      y: data.y,
+      mapId: data.mapId
+    };
+    
+    // Broadcast all players to everyone except the sender
+    socket.broadcast.emit('playerUpdates', players);
   });
 
-  ws.on('close', () => {
-    if (playerId) {
-      clients.delete(playerId);
-      broadcastExcept(playerId, { type: 'PLAYER_LEAVE', id: playerId });
-    }
+  socket.on('disconnect', () => {
+    console.log(`Player disconnected: ${socket.id}`);
+    delete players[socket.id];
+    io.emit('playerDisconnected', socket.id);
   });
 });
 
-function sendPlayerList(ws) {
-  const playerList = Array.from(clients.values()).map(p => ({
-    id: p.id,
-    username: p.username,
-    x: p.x,
-    y: p.y,
-    map: p.map
-  }));
-
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'PLAYER_LIST', players: playerList }));
-  }
-}
-
-function broadcastExcept(senderId, data) {
-  const payload = JSON.stringify(data);
-  for (const [id, client] of clients.entries()) {
-    if (id !== senderId && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(payload);
-    }
-  }
-}
-
-console.log(`Multiplayer server live on port ${PORT}`);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
