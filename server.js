@@ -17,8 +17,8 @@ app.use(express.static('public'));
 const players = {};
 
 io.on('connection', (socket) => {
-  // Added gender: 0 to default player data
-  players[socket.id] = { id: socket.id, x: 0, y: 0, mapGroup: 0, mapNum: 0, dir: 1, gender: 0 };
+  // Added animState: 0, gender: 0, and name: '' to default player data
+  players[socket.id] = { id: socket.id, x: 0, y: 0, mapGroup: 0, mapNum: 0, dir: 1, animState: 0, gender: 0, name: '' };
 
   // Send all active players to the newly connected user
   socket.emit('currentPlayers', players);
@@ -28,7 +28,7 @@ io.on('connection', (socket) => {
 
   socket.on('updatePosition', (data) => {
     if (players[socket.id]) {
-      // Automatically merges incoming gender data along with x, y, dir, mapGroup, etc.
+      // Automatically merges incoming name, gender, animState along with x, y, dir, mapGroup, etc.
       players[socket.id] = { ...players[socket.id], ...data, id: socket.id };
       socket.broadcast.emit('playerMoved', players[socket.id]);
     }
